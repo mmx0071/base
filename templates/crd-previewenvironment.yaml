@@ -1,0 +1,113 @@
+# PreviewEnvironment CRD 骨架（设计样例，部署前由 controller-gen 生成物替换或合并）
+# apiVersion / schema 与 docs/operator-go设计.md §4 对齐
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: previewenvironments.preview.platform.io
+spec:
+  group: preview.platform.io
+  names:
+    kind: PreviewEnvironment
+    listKind: PreviewEnvironmentList
+    plural: previewenvironments
+    singular: previewenvironment
+  scope: Cluster
+  versions:
+    - name: v1alpha1
+      served: true
+      storage: true
+      schema:
+        openAPIV3Schema:
+          type: object
+          description: 声明式 PR 预览环境；status 仅由 preview-operator 写入。
+          properties:
+            spec:
+              type: object
+              required:
+                - repoFullName
+                - prNumber
+                - headSHA
+                - host
+              properties:
+                repoFullName:
+                  type: string
+                prNumber:
+                  type: integer
+                  minimum: 1
+                headSHA:
+                  type: string
+                  minLength: 7
+                headBranch:
+                  type: string
+                image:
+                  type: string
+                  description: 为空时 phase=Pending，不创建 Deployment
+                host:
+                  type: string
+                profile:
+                  type: string
+                  default: default
+                replicas:
+                  type: integer
+                  minimum: 0
+                  default: 1
+                containerPort:
+                  type: integer
+                  default: 8080
+                resources:
+                  type: object
+                  x-kubernetes-preserve-unknown-fields: true
+                env:
+                  type: array
+                  items:
+                    type: object
+                    x-kubernetes-preserve-unknown-fields: true
+                secretRef:
+                  type: string
+                ttlHours:
+                  type: integer
+            status:
+              type: object
+              properties:
+                phase:
+                  type: string
+                  enum:
+                    - Pending
+                    - Ready
+                    - Failed
+                    - Terminating
+                observedSHA:
+                  type: string
+                url:
+                  type: string
+                conditions:
+                  type: array
+                  items:
+                    type: object
+                    properties:
+                      type:
+                        type: string
+                      status:
+                        type: string
+                      reason:
+                        type: string
+                      message:
+                        type: string
+                      lastTransitionTime:
+                        type: string
+                        format: date-time
+      subresources:
+        status: {}
+      additionalPrinterColumns:
+        - name: Phase
+          type: string
+          jsonPath: .status.phase
+        - name: Image
+          type: string
+          jsonPath: .spec.image
+        - name: Host
+          type: string
+          jsonPath: .spec.host
+        - name: Age
+          type: date
+          jsonPath: .metadata.creationTimestamp

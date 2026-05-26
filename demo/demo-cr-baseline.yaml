@@ -1,0 +1,21 @@
+# 【手工调试】PR #41 基线（无 tree）。主路径见 docs/minikube实现预案.md
+# 副本见 templates/preview-environment-cr-minikube-baseline.yaml
+apiVersion: preview.platform.io/v1alpha1
+kind: PreviewEnvironment
+metadata:
+  name: myorg-preview-demo-pr-41
+  labels:
+    preview.platform.io/enabled: "true"
+    preview.platform.io/repo: myorg-preview-demo
+    preview.platform.io/pr-number: "41"
+    preview.platform.io/cr: myorg-preview-demo-pr-41
+spec:
+  repoFullName: myorg/preview-demo
+  prNumber: 41
+  headSHA: cafebabe00000000000000000000000000000000
+  headBranch: main
+  image: preview-demo:pr-41-base
+  host: pr-41-myorg-preview-demo.preview.local
+  profile: default
+  replicas: 1
+  containerPort: 8080

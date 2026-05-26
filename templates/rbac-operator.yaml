@@ -1,0 +1,109 @@
+# preview-operator 与 preview-webhook RBAC 骨架
+# 部署前替换 namespace：preview-system、preview
+#
+# 安全要点：工作负载写权限 MUST 仅通过 Role 绑定到 preview NS；
+# ClusterRole 不得包含 deployments/services/ingresses 等写 verbs。
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: preview-system
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: preview
+  labels:
+    app.kubernetes.io/name: preview-workloads
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: preview-operator
+  namespace: preview-system
+---
+# ClusterRole：仅 CR 与 namespaces 只读
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: preview-operator
+rules:
+  - apiGroups: ["preview.platform.io"]
+    resources: ["previewenvironments", "previewenvironments/status", "previewenvironments/finalizers"]
+    # delete：Failed CR TTL 到期后由 Operator 清理（Webhook 仅处理 PR closed）
+    verbs: ["get", "list", "watch", "update", "patch", "delete"]
+  - apiGroups: [""]
+    resources: ["namespaces"]
+    verbs: ["get", "list", "watch"]
+---
+# Role：preview NS 内工作负载的唯一写入口
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: preview-operator-preview-ns
+  namespace: preview
+rules:
+  - apiGroups: ["apps"]
+    resources: ["deployments"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  - apiGroups: [""]
+    resources: ["services", "configmaps", "secrets"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  - apiGroups: ["networking.k8s.io"]
+    resources: ["ingresses", "networkpolicies"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: preview-operator-preview-ns
+  namespace: preview
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: preview-operator-preview-ns
+subjects:
+  - kind: ServiceAccount
+    name: preview-operator
+    namespace: preview-system
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: preview-operator
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: preview-operator
+subjects:
+  - kind: ServiceAccount
+    name: preview-operator
+    namespace: preview-system
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: preview-webhook
+  namespace: preview-system
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: preview-webhook
+rules:
+  - apiGroups: ["preview.platform.io"]
+    resources: ["previewenvironments"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: preview-webhook
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: preview-webhook
+subjects:
+  - kind: ServiceAccount
+    name: preview-webhook
+    namespace: preview-system

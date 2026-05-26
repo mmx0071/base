@@ -1,0 +1,21 @@
+# 【手工调试】PR #42 含 tree。主路径：GitHub PR → Webhook → Actions image-ready（见 docs/minikube实现预案.md）
+# 副本见 templates/preview-environment-cr-minikube.yaml
+apiVersion: preview.platform.io/v1alpha1
+kind: PreviewEnvironment
+metadata:
+  name: myorg-preview-demo-pr-42
+  labels:
+    preview.platform.io/enabled: "true"
+    preview.platform.io/repo: myorg-preview-demo
+    preview.platform.io/pr-number: "42"
+    preview.platform.io/cr: myorg-preview-demo-pr-42
+spec:
+  repoFullName: myorg/preview-demo
+  prNumber: 42
+  headSHA: deadbeef00000000000000000000000000000000
+  headBranch: feat/add-tree
+  image: preview-demo:pr-42-with-tree
+  host: pr-42-myorg-preview-demo.preview.local
+  profile: default
+  replicas: 1
+  containerPort: 8080

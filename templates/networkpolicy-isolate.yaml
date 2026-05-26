@@ -1,0 +1,71 @@
+# 每 PR 一条：与 CR myorg-myapp-pr-42 对应（命名 {repo-slug}-pr-{n}-isolate）
+# 部署前替换：
+#   - ingress from：namespaceSelector 须与 INGRESS_CONTROLLER_NS 标签一致（示例为 ingress-nginx）
+#   - egress 镜像：ipBlock.cidr 改为 REGISTRY_EGRESS_CIDR
+#   - staging 依赖等 egress 规则
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: myorg-myapp-pr-42-isolate
+  namespace: preview
+  labels:
+    preview.platform.io/enabled: "true"
+    preview.platform.io/repo: myorg-myapp
+    preview.platform.io/pr-number: "42"
+    preview.platform.io/cr: myorg-myapp-pr-42
+    app.kubernetes.io/managed-by: preview-operator
+spec:
+  podSelector:
+    matchLabels:
+      preview.platform.io/cr: myorg-myapp-pr-42
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: ingress-nginx
+      ports:
+        - protocol: TCP
+          port: 8080
+    - from:
+        - podSelector:
+            matchLabels:
+              preview.platform.io/cr: myorg-myapp-pr-42
+  egress:
+    - ports:
+        - protocol: UDP
+          port: 53
+    # 镜像仓库（MUST 配置，否则 default-deny 下无法拉镜像）
+    - to:
+        - ipBlock:
+            cidr: 10.0.0.0/8
+      ports:
+        - protocol: TCP
+          port: 443
+    # TODO: 由运维填写 staging 依赖
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              env: staging
+      ports:
+        - protocol: TCP
+          port: 6379
+---
+# Namespace 级默认拒绝（集群初始化时 apply 一次）
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: preview-default-deny
+  namespace: preview
+  labels:
+    app.kubernetes.io/managed-by: preview-operator
+spec:
+  podSelector:
+    matchLabels:
+      preview.platform.io/enabled: "true"
+  policyTypes:
+    - Ingress
+    - Egress

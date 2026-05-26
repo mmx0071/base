@@ -1,0 +1,80 @@
+# Minikube / 本地平台：PR 构建推 GHCR 后回调 image-ready
+# 复制到 GitHub 演示仓后替换 REGISTRY、APP_NAME、PREVIEW_CALLBACK_* secrets
+name: Preview Build
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+concurrency:
+  group: preview-${{ github.repository }}-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  build-and-notify:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout PR head
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+
+      - name: Set vars
+        id: vars
+        run: |
+          owner="${{ github.repository_owner }}"
+          echo "pr=${{ github.event.pull_request.number }}" >> $GITHUB_OUTPUT
+          echo "sha=${{ github.event.pull_request.head.sha }}" >> $GITHUB_OUTPUT
+          echo "short_sha=${GITHUB_SHA::7}" >> $GITHUB_OUTPUT
+          echo "image=ghcr.io/${owner}/preview-demo:pr-${{ github.event.pull_request.number }}-${GITHUB_SHA::7}" >> $GITHUB_OUTPUT
+        env:
+          GITHUB_SHA: ${{ github.event.pull_request.head.sha }}
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          tags: ${{ steps.vars.outputs.image }}
+
+      - name: Notify preview platform (image-ready)
+        run: |
+          body=$(jq -n \
+            --arg repo "${{ github.repository }}" \
+            --argjson pr ${{ github.event.pull_request.number }} \
+            --arg sha "${{ steps.vars.outputs.sha }}" \
+            --arg image "${{ steps.vars.outputs.image }}" \
+            '{repoFullName: $repo, prNumber: $pr, headSHA: $sha, image: $image}')
+          for delay in 2 4 8 16 32; do
+            code=$(curl -s -o /tmp/preview-resp -w "%{http_code}" -X POST "${PREVIEW_CALLBACK_URL}" \
+              -H "Authorization: Bearer ${PREVIEW_CALLBACK_TOKEN}" \
+              -H "Content-Type: application/json" \
+              -d "${body}")
+            if [ "${code}" = "200" ] || [ "${code}" = "204" ]; then
+              exit 0
+            fi
+            if [ "${code}" != "404" ]; then
+              cat /tmp/preview-resp >&2
+              exit 1
+            fi
+            echo "CR not ready (404), retry in ${delay}s..."
+            sleep "${delay}"
+          done
+          echo "image-ready failed after retries" >&2
+          exit 1
+        env:
+          PREVIEW_CALLBACK_URL: ${{ secrets.PREVIEW_CALLBACK_URL }}
+          PREVIEW_CALLBACK_TOKEN: ${{ secrets.PREVIEW_CALLBACK_TOKEN }}
+
+# PR closed 由 GitHub Webhook → preview-webhook 删 CR，本 workflow 不处理
